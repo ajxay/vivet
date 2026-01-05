@@ -495,16 +495,18 @@
               openingVideo.readyState
             );
 
-            // Check if video is fully loaded (99% or more to account for rounding)
+            // Check if video is fully loaded (must be 100% or very close, and readyState must be 4)
             if (
-              progress >= 99 &&
+              progress >= 99.5 &&
               !videoLoaded &&
-              openingVideo.readyState >= 3
+              openingVideo.readyState >= 4
             ) {
               videoLoaded = true;
               if (progressInterval) {
                 clearInterval(progressInterval);
               }
+              // Ensure we're at 100%
+              progressBarFill.style.width = "100%";
               playVideoAfterLoad();
             }
           } else if (openingVideo.readyState >= 2) {
@@ -540,19 +542,29 @@
         }, 100);
 
         // Wait for video to be fully loaded before playing
+        // Only use canplaythrough as a backup, not primary trigger
         openingVideo.addEventListener("canplaythrough", function () {
-          console.log("Video can play through");
-          if (!videoLoaded) {
-            videoLoaded = true;
-            if (progressInterval) {
-              clearInterval(progressInterval);
-            }
-            progressBarFill.style.width = "100%";
-            playVideoAfterLoad();
-          }
+          console.log(
+            "Video can play through, but checking actual progress..."
+          );
+          // Don't trigger play here - let progress tracking handle it
+          // This is just to ensure we have enough data
         });
 
         function playVideoAfterLoad() {
+          // Double check that video is actually ready
+          if (openingVideo.readyState < 4) {
+            console.log(
+              "Video not fully ready, waiting... ReadyState:",
+              openingVideo.readyState
+            );
+            // Wait a bit more
+            setTimeout(function () {
+              playVideoAfterLoad();
+            }, 200);
+            return;
+          }
+
           // Ensure progress bar is at 100%
           progressBarFill.style.width = "100%";
 
@@ -564,12 +576,24 @@
             setTimeout(function () {
               openingVideoContainer.classList.add("visible");
 
-              // Ensure video is ready before playing
-              if (openingVideo.readyState >= 3) {
+              // Reset video to start and ensure it's ready
+              openingVideo.currentTime = 0;
+
+              // Wait a moment for video to be ready
+              setTimeout(function () {
                 openingVideo
                   .play()
                   .then(function () {
-                    console.log("Opening video started playing");
+                    console.log(
+                      "Opening video started playing at time:",
+                      openingVideo.currentTime
+                    );
+
+                    // Verify video is actually playing
+                    if (openingVideo.paused) {
+                      console.log("Video is paused, trying to play again...");
+                      openingVideo.play();
+                    }
 
                     // Show menu after opening video starts
                     setTimeout(function () {
@@ -583,17 +607,7 @@
                       menuContainer.classList.add("loaded");
                     }, 500);
                   });
-              } else {
-                // Wait a bit more if video isn't ready
-                setTimeout(function () {
-                  openingVideo.play().catch(function (error) {
-                    console.log("Opening video play error:", error);
-                  });
-                  setTimeout(function () {
-                    menuContainer.classList.add("loaded");
-                  }, 500);
-                }, 200);
-              }
+              }, 100);
             }, 100);
           }, 300);
         }
