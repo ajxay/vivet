@@ -476,19 +476,29 @@
         // Track video loading progress
         function updateProgress() {
           if (openingVideo.duration > 0 && !isNaN(openingVideo.duration)) {
-            let totalBuffered = 0;
+            const duration = openingVideo.duration;
+            let progress = 0;
 
-            // Check all buffered ranges to get total buffered time
+            // Check the actual end of the last buffered range (most accurate)
             if (openingVideo.buffered.length > 0) {
-              for (let i = 0; i < openingVideo.buffered.length; i++) {
-                totalBuffered +=
-                  openingVideo.buffered.end(i) - openingVideo.buffered.start(i);
+              const lastRangeEnd = openingVideo.buffered.end(
+                openingVideo.buffered.length - 1
+              );
+              progress = (lastRangeEnd / duration) * 100;
+
+              // If buffering seems stuck, try to force more loading
+              if (progress < 95 && openingVideo.networkState === 2) {
+                // Network is idle but not fully loaded, try seeking to trigger more loading
+                if (!openingVideo.seeking) {
+                  // Seek to near the end to force buffering of the rest
+                  const seekTime = Math.min(lastRangeEnd + 5, duration - 1);
+                  openingVideo.currentTime = seekTime;
+                  console.log("Forcing buffering by seeking to:", seekTime);
+                }
               }
             }
 
-            const duration = openingVideo.duration;
-            const percent = (totalBuffered / duration) * 100;
-            const progress = Math.min(Math.max(percent, 0), 100);
+            progress = Math.min(Math.max(progress, 0), 100);
             progressBarFill.style.width = progress + "%";
 
             console.log(
@@ -496,25 +506,34 @@
               progress.toFixed(2) + "%",
               "ReadyState:",
               openingVideo.readyState,
+              "NetworkState:",
+              openingVideo.networkState,
               "Buffered ranges:",
-              openingVideo.buffered.length
+              openingVideo.buffered.length,
+              "Last range end:",
+              openingVideo.buffered.length > 0
+                ? openingVideo.buffered
+                    .end(openingVideo.buffered.length - 1)
+                    .toFixed(2)
+                : "N/A",
+              "Duration:",
+              duration.toFixed(2)
             );
 
-            // Check if video is fully loaded - must be very close to 100%
-            // Also check if the last buffered range covers the entire duration
+            // Check if video is fully loaded - the last buffered range should reach near the end
             let isFullyBuffered = false;
             if (openingVideo.buffered.length > 0) {
               const lastRangeEnd = openingVideo.buffered.end(
                 openingVideo.buffered.length - 1
               );
               const firstRangeStart = openingVideo.buffered.start(0);
-              // Check if buffering starts at 0 and ends at or near the duration
+              // Check if buffering starts at 0 and ends at or near the duration (within 1 second)
               isFullyBuffered =
-                firstRangeStart <= 0.1 && lastRangeEnd >= duration * 0.99;
+                firstRangeStart <= 0.1 && lastRangeEnd >= duration - 1;
             }
 
             if (
-              (progress >= 99 || isFullyBuffered) &&
+              (progress >= 98 || isFullyBuffered) &&
               !videoLoaded &&
               openingVideo.readyState >= 4
             ) {
@@ -522,6 +541,8 @@
               if (progressInterval) {
                 clearInterval(progressInterval);
               }
+              // Reset to start before playing
+              openingVideo.currentTime = 0;
               // Ensure we're at 100%
               progressBarFill.style.width = "100%";
               console.log("Video fully loaded! Starting playback...");
