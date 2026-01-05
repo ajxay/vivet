@@ -475,29 +475,46 @@
 
         // Track video loading progress
         function updateProgress() {
-          if (
-            openingVideo.buffered.length > 0 &&
-            openingVideo.duration > 0 &&
-            !isNaN(openingVideo.duration)
-          ) {
-            const bufferedEnd = openingVideo.buffered.end(
-              openingVideo.buffered.length - 1
-            );
+          if (openingVideo.duration > 0 && !isNaN(openingVideo.duration)) {
+            let totalBuffered = 0;
+
+            // Check all buffered ranges to get total buffered time
+            if (openingVideo.buffered.length > 0) {
+              for (let i = 0; i < openingVideo.buffered.length; i++) {
+                totalBuffered +=
+                  openingVideo.buffered.end(i) - openingVideo.buffered.start(i);
+              }
+            }
+
             const duration = openingVideo.duration;
-            const percent = (bufferedEnd / duration) * 100;
+            const percent = (totalBuffered / duration) * 100;
             const progress = Math.min(Math.max(percent, 0), 100);
             progressBarFill.style.width = progress + "%";
 
             console.log(
               "Progress:",
-              progress + "%",
+              progress.toFixed(2) + "%",
               "ReadyState:",
-              openingVideo.readyState
+              openingVideo.readyState,
+              "Buffered ranges:",
+              openingVideo.buffered.length
             );
 
-            // Check if video is fully loaded (must be 100% or very close, and readyState must be 4)
+            // Check if video is fully loaded - must be very close to 100%
+            // Also check if the last buffered range covers the entire duration
+            let isFullyBuffered = false;
+            if (openingVideo.buffered.length > 0) {
+              const lastRangeEnd = openingVideo.buffered.end(
+                openingVideo.buffered.length - 1
+              );
+              const firstRangeStart = openingVideo.buffered.start(0);
+              // Check if buffering starts at 0 and ends at or near the duration
+              isFullyBuffered =
+                firstRangeStart <= 0.1 && lastRangeEnd >= duration * 0.99;
+            }
+
             if (
-              progress >= 99.5 &&
+              (progress >= 99 || isFullyBuffered) &&
               !videoLoaded &&
               openingVideo.readyState >= 4
             ) {
@@ -507,6 +524,7 @@
               }
               // Ensure we're at 100%
               progressBarFill.style.width = "100%";
+              console.log("Video fully loaded! Starting playback...");
               playVideoAfterLoad();
             }
           } else if (openingVideo.readyState >= 2) {
@@ -632,20 +650,8 @@
           }, 300);
         }
 
-        // Fallback: if opening video doesn't load after 30 seconds, show menu
-        setTimeout(function () {
-          if (!videoLoaded && !menuContainer.classList.contains("loaded")) {
-            console.log(
-              "Fallback: Video took too long to load, showing menu anyway"
-            );
-            if (progressInterval) {
-              clearInterval(progressInterval);
-            }
-            loading.classList.add("hidden");
-            openingVideoContainer.classList.add("visible");
-            menuContainer.classList.add("loaded");
-          }
-        }, 30000);
+        // No fallback - we MUST wait for video to fully load
+        // The video is essential, so we wait as long as needed
 
         // Handle opening video errors
         openingVideo.addEventListener("error", function () {
