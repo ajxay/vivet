@@ -552,18 +552,10 @@
         });
 
         function playVideoAfterLoad() {
-          // Double check that video is actually ready
-          if (openingVideo.readyState < 4) {
-            console.log(
-              "Video not fully ready, waiting... ReadyState:",
-              openingVideo.readyState
-            );
-            // Wait a bit more
-            setTimeout(function () {
-              playVideoAfterLoad();
-            }, 200);
-            return;
-          }
+          console.log(
+            "playVideoAfterLoad called, readyState:",
+            openingVideo.readyState
+          );
 
           // Ensure progress bar is at 100%
           progressBarFill.style.width = "100%";
@@ -572,43 +564,71 @@
             // Hide progress bar first
             loading.classList.add("hidden");
 
-            // Show and play video after progress bar is hidden
+            // Show video container
+            openingVideoContainer.classList.add("visible");
+
+            // Wait a moment for container to be visible
             setTimeout(function () {
-              openingVideoContainer.classList.add("visible");
+              // Ensure video is loaded and ready
+              if (openingVideo.readyState >= 3) {
+                // Try to play the video
+                const playPromise = openingVideo.play();
 
-              // Reset video to start and ensure it's ready
-              openingVideo.currentTime = 0;
+                if (playPromise !== undefined) {
+                  playPromise
+                    .then(function () {
+                      console.log("Opening video started playing successfully");
+                      console.log(
+                        "Video paused:",
+                        openingVideo.paused,
+                        "Current time:",
+                        openingVideo.currentTime
+                      );
 
-              // Wait a moment for video to be ready
-              setTimeout(function () {
-                openingVideo
-                  .play()
-                  .then(function () {
-                    console.log(
-                      "Opening video started playing at time:",
-                      openingVideo.currentTime
-                    );
-
-                    // Verify video is actually playing
-                    if (openingVideo.paused) {
-                      console.log("Video is paused, trying to play again...");
-                      openingVideo.play();
-                    }
-
-                    // Show menu after opening video starts
-                    setTimeout(function () {
+                      // Show menu after opening video starts
+                      setTimeout(function () {
+                        menuContainer.classList.add("loaded");
+                      }, 500);
+                    })
+                    .catch(function (error) {
+                      console.log("Opening video autoplay prevented:", error);
+                      // Try again after a short delay
+                      setTimeout(function () {
+                        openingVideo.play().catch(function (err) {
+                          console.log("Second play attempt failed:", err);
+                        });
+                      }, 500);
+                      // Still show menu
+                      setTimeout(function () {
+                        menuContainer.classList.add("loaded");
+                      }, 1000);
+                    });
+                } else {
+                  // Fallback for older browsers
+                  openingVideo.play();
+                  setTimeout(function () {
+                    menuContainer.classList.add("loaded");
+                  }, 500);
+                }
+              } else {
+                console.log(
+                  "Video not ready yet, readyState:",
+                  openingVideo.readyState
+                );
+                // Wait a bit more and try again
+                setTimeout(function () {
+                  openingVideo
+                    .play()
+                    .then(function () {
                       menuContainer.classList.add("loaded");
-                    }, 500);
-                  })
-                  .catch(function (error) {
-                    console.log("Opening video autoplay prevented:", error);
-                    // Still show menu even if autoplay fails
-                    setTimeout(function () {
+                    })
+                    .catch(function (error) {
+                      console.log("Play failed:", error);
                       menuContainer.classList.add("loaded");
-                    }, 500);
-                  });
-              }, 100);
-            }, 100);
+                    });
+                }, 500);
+              }
+            }, 200);
           }, 300);
         }
 
